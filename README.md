@@ -6,9 +6,9 @@
 
 选题 · 写作 · 编辑审稿 · 可选 AI 配图 · 18 主题排版 · 草稿箱推送 · 多平台改写 · 越用越像你
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/imraywang/wewrite/blob/main/LICENSE)
-[![Checks](https://github.com/imraywang/wewrite/actions/workflows/checks.yml/badge.svg)](https://github.com/imraywang/wewrite/actions/workflows/checks.yml)
-[![PyPI](https://img.shields.io/pypi/v/wewrite?color=059669&label=PyPI)](https://pypi.org/project/wewrite/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/yujipeng/wewrite/blob/main/LICENSE)
+[![Checks](https://github.com/yujipeng/wewrite/actions/workflows/checks.yml/badge.svg)](https://github.com/yujipeng/wewrite/actions/workflows/checks.yml)
+[![PyPI (upstream)](https://img.shields.io/pypi/v/wewrite?color=059669&label=PyPI%20upstream)](https://pypi.org/project/wewrite/)
 [![Skills](https://img.shields.io/badge/skills-1%20主入口%20%2B%209%20模块-8b5cf6)](#-模块速查)
 [![Themes](https://img.shields.io/badge/themes-18%20%2B%20learn--theme-f59e0b)](#-排版引擎)
 [![Agents](https://img.shields.io/badge/Claude%20Code%20·%20Codex%20·%20OpenClaw%20·%20Hermes-supported-6366f1)](#-快速开始)
@@ -16,6 +16,20 @@
 </div>
 
 ---
+
+> **项目来源**：本仓库 [yujipeng/wewrite](https://github.com/yujipeng/wewrite) fork 自
+> [imraywang/wewrite](https://github.com/imraywang/wewrite)，沿用上游的 MIT License。
+> 在上游基础上，本仓库目前增加了：
+>
+> - **微信 API 出口可配置**：`wechat.base_url`（或 `WECHAT_API_BASE`）可指向 nginx relay 或
+>   SSH 隧道，`publish` / `image-post` / `stats` / `learn-edits` 的请求统一走该出口，用于解决
+>   出口 IP 不在白名单的 `errcode 40164`；不配置时行为与上游一致（直连 `api.weixin.qq.com`）。
+> - **[`docs/wechat-api-relay.md`](https://github.com/yujipeng/wewrite/blob/main/docs/wechat-api-relay.md)**：
+>   SSH 隧道与 Nginx relay 两种接法的完整配置、验证与排障。
+> - 安装与部署说明以本仓库为来源（见下方「快速开始」「服务器 / CI 部署」）。
+>
+> 其余能力、文档与设计均来自上游；上游自身的问题请反馈到
+> [上游仓库](https://github.com/imraywang/wewrite)，本仓库只维护上述定制部分。
 
 一个给 AI Agent（Claude Code / Codex / OpenClaw / Hermes 等）用的公众号内容 Skill。你说「写一篇公众号文章」，它会抓热点、评选题、搜真实素材、按你的人格风格出稿并完成编辑审稿。正文完成后，你可以直接交付，也可以再单独要求配图、排版预览或推送草稿箱。原始正文始终保留；配图会生成独立图片和带图副本。想改就按自己的意思改，再让它「学习我的修改」，下一篇会更像你。
 
@@ -45,18 +59,18 @@
 
 ## 👀 效果预览
 
-同一篇示例文章（[docs/demo-article.md](https://github.com/imraywang/wewrite/blob/main/docs/demo-article.md)）× 6 个主题，`wewrite preview` 真实渲染长图（含 label 小标签、steps 步骤卡、callout / timeline / quote / summary 组件与 AIGC 声明脚注）：
+同一篇示例文章（[docs/demo-article.md](https://github.com/yujipeng/wewrite/blob/main/docs/demo-article.md)）× 6 个主题，`wewrite preview` 真实渲染长图（含 label 小标签、steps 步骤卡、callout / timeline / quote / summary 组件与 AIGC 声明脚注）：
 
 <table>
 <tr>
-<td width="33%" align="center"><img src="https://raw.githubusercontent.com/imraywang/wewrite/main/docs/screenshots/professional-clean.png" width="250"><br><sub><b>professional-clean（默认）</b></sub></td>
-<td width="33%" align="center"><img src="https://raw.githubusercontent.com/imraywang/wewrite/main/docs/screenshots/sspai.png" width="250"><br><sub><b>sspai</b></sub></td>
-<td width="33%" align="center"><img src="https://raw.githubusercontent.com/imraywang/wewrite/main/docs/screenshots/warm-editorial.png" width="250"><br><sub><b>warm-editorial</b></sub></td>
+<td width="33%" align="center"><img src="https://raw.githubusercontent.com/yujipeng/wewrite/main/docs/screenshots/professional-clean.png" width="250"><br><sub><b>professional-clean（默认）</b></sub></td>
+<td width="33%" align="center"><img src="https://raw.githubusercontent.com/yujipeng/wewrite/main/docs/screenshots/sspai.png" width="250"><br><sub><b>sspai</b></sub></td>
+<td width="33%" align="center"><img src="https://raw.githubusercontent.com/yujipeng/wewrite/main/docs/screenshots/warm-editorial.png" width="250"><br><sub><b>warm-editorial</b></sub></td>
 </tr>
 <tr>
-<td width="33%" align="center"><img src="https://raw.githubusercontent.com/imraywang/wewrite/main/docs/screenshots/tech-modern.png" width="250"><br><sub><b>tech-modern</b></sub></td>
-<td width="33%" align="center"><img src="https://raw.githubusercontent.com/imraywang/wewrite/main/docs/screenshots/bauhaus.png" width="250"><br><sub><b>bauhaus</b></sub></td>
-<td width="33%" align="center"><img src="https://raw.githubusercontent.com/imraywang/wewrite/main/docs/screenshots/midnight.png" width="250"><br><sub><b>midnight</b></sub></td>
+<td width="33%" align="center"><img src="https://raw.githubusercontent.com/yujipeng/wewrite/main/docs/screenshots/tech-modern.png" width="250"><br><sub><b>tech-modern</b></sub></td>
+<td width="33%" align="center"><img src="https://raw.githubusercontent.com/yujipeng/wewrite/main/docs/screenshots/bauhaus.png" width="250"><br><sub><b>bauhaus</b></sub></td>
+<td width="33%" align="center"><img src="https://raw.githubusercontent.com/yujipeng/wewrite/main/docs/screenshots/midnight.png" width="250"><br><sub><b>midnight</b></sub></td>
 </tr>
 </table>
 
@@ -73,25 +87,29 @@
 ### 方式一：一键安装（推荐）
 
 ```bash
-git clone --depth 1 https://github.com/imraywang/wewrite.git ~/wewrite
+git clone --depth 1 https://github.com/yujipeng/wewrite.git ~/wewrite
 cd ~/wewrite && bash install.sh
 ```
 
 `install.sh` 做三件事：装 `wewrite` CLI（uv/pipx，无则回退 venv）、把 10 个 skill 链接到 `~/.claude/skills/` 与 `~/.agents/skills/`（检测到 OpenClaw / Codex 时一并链接其 skills 目录）、把旧版用户状态迁到 `~/.wewrite/`。
 
+在仓库里运行时，CLI 从**本地源码**安装（不是 PyPI 上的上游原版），本仓库的改动会直接生效；脚本幂等，可重复运行。
+
 ### 方式二：skills.sh 按需挑模块
 
 ```bash
-npx skills add imraywang/wewrite
+npx skills add yujipeng/wewrite
 ```
 
-skill 目录自包含、复制即用；CLI 另装一条：`uv tool install wewrite`（或 `pipx install wewrite`）。
+skill 目录自包含、复制即用；CLI 另装一条：`uv tool install git+https://github.com/yujipeng/wewrite.git`（或 `pipx install git+https://github.com/yujipeng/wewrite.git`）。
+
+> PyPI 上的 `wewrite` 是**上游原版**，不含本仓库的微信出口等改动；要用本仓库版本请用上面的 `git+` 安装，或直接 clone 后跑 `install.sh`。
 
 ### 方式三：让 AI 自己装
 
 对任意 Agent 说一句：
 
-> 请帮我安装 https://github.com/imraywang/wewrite 这个 skill（跑仓库里的 install.sh）
+> 请帮我安装 https://github.com/yujipeng/wewrite 这个 skill（跑仓库里的 install.sh）
 
 装好后直接开聊：
 
@@ -121,10 +139,10 @@ for s in ~/wewrite/skills/wewrite*; do ln -sfn "$s" ~/.openclaw/skills/$(basenam
 **Hermes**（自带技能管理器）：
 
 ```bash
-hermes skills install imraywang/wewrite
+hermes skills install yujipeng/wewrite
 ```
 
-各家均需 CLI 在 PATH：`uv tool install wewrite`。
+各家均需 CLI 在 PATH：`uv tool install git+https://github.com/yujipeng/wewrite.git`。
 
 </details>
 
@@ -151,7 +169,7 @@ wechat:
 - **SSH 隧道** — 能 SSH 到一台白名单服务器时最快，不在公网开任何端口
 - **Nginx 反向代理** — 有固定公网 IP 时一次配置，多台机器共用
 
-详见 [`docs/wechat-api-relay.md`](https://github.com/imraywang/wewrite/blob/main/docs/wechat-api-relay.md)。
+详见 [`docs/wechat-api-relay.md`](https://github.com/yujipeng/wewrite/blob/main/docs/wechat-api-relay.md)。
 
 ## 🧩 模块速查
 
@@ -242,7 +260,7 @@ WeWrite 的目标是**写出准确、有观点、对读者有用的文章**。�
 
 每篇任务保留 `brief.yaml`、`claims.yaml`、`draft.md`、`article.md` 和
 `review-report.json`，方便追溯“为什么这样写”和初稿到成稿改了多少。完整标准见
-[`docs/content-quality-rubric.md`](https://github.com/imraywang/wewrite/blob/main/docs/content-quality-rubric.md)。
+[`docs/content-quality-rubric.md`](https://github.com/yujipeng/wewrite/blob/main/docs/content-quality-rubric.md)。
 
 ## 🎨 排版引擎
 
@@ -329,6 +347,31 @@ wewrite home                                        # 查看状态目录
 wewrite migrate --from <旧仓库路径>                  # 从 v2.1 及更早版本迁移状态
 ```
 
+## 🖥️ 服务器 / CI 部署（只用 CLI）
+
+skill 面向 Agent 在本机使用；服务器、CI、定时任务里通常只需要 `wewrite` CLI 来做排版、发布与数据回填。
+
+```bash
+# 1) 装 CLI（本仓库源码；不用 uv 就换 pipx，或 python3 -m venv .venv && .venv/bin/pip install ...）
+uv tool install git+https://github.com/yujipeng/wewrite.git
+
+# 2) 凭据走环境变量，不落盘（config.yaml 里的值会被同名环境变量覆盖）
+export WECHAT_APPID=wx... WECHAT_SECRET=...
+export WEWRITE_IMAGE_API_KEY=...        # 需要生图时才要
+
+# 3) 跑命令
+wewrite preview article.md --no-open -o article.html   # 只出 HTML，不开浏览器
+wewrite publish article.md --cover cover.png           # 推草稿箱
+wewrite stats --days 7                                 # 回填阅读数据
+```
+
+- **状态目录**：默认 `~/.wewrite/`（`config.yaml`、`history.yaml`、风格库、学习产物）。容器/CI 里用
+  `WEWRITE_HOME=/data/wewrite` 指到挂载卷，否则每次重建都会丢配置与历史。
+- **出口 IP**：服务器不在公众号白名单时，配 `wechat.base_url` 或 `WECHAT_API_BASE` 走 relay，
+  见 [`docs/wechat-api-relay.md`](https://github.com/yujipeng/wewrite/blob/main/docs/wechat-api-relay.md)。
+- **自检**：`wewrite diagnose` 检查环境、凭据与依赖是否齐；`wewrite home` 确认状态目录位置。
+- 服务器上不需要 `~/.claude/skills/` 等 skill 目录——那部分只影响 Agent 的对话入口。
+
 ## 🔄 工作流程
 
 ```
@@ -353,7 +396,7 @@ Step 6  封存原始正文 → 写入历史                         ← 主入�
 默认连续完成正文，但“写一篇”只交付本地成稿。“完整制作”是正文、配图和本地预览三个独立
 动作的组合快捷方式；“推到草稿箱”才授予发布权限，而且不会自动生图。已完成文章可以继续
 配图、排版或发布，原始正文不被覆盖。每篇文章使用独立任务目录并可恢复（契约见
-[`skills/wewrite/references/pipeline-state.md`](https://github.com/imraywang/wewrite/blob/main/skills/wewrite/references/pipeline-state.md)）。
+[`skills/wewrite/references/pipeline-state.md`](https://github.com/yujipeng/wewrite/blob/main/skills/wewrite/references/pipeline-state.md)）。
 
 <details>
 <summary><b>📁 目录结构</b></summary>
@@ -394,14 +437,31 @@ State 层（全部在 `~/.wewrite/`，不在仓库）：`config.yaml`、`style.y
 对 Agent 说「更新」，或手动：
 
 ```bash
-cd <仓库路径> && git pull && bash install.sh
+cd ~/wewrite && git pull && bash install.sh
+```
+
+只升级 CLI（不进仓库目录）：
+
+```bash
+uv tool install --force git+https://github.com/yujipeng/wewrite.git
+# 或 pipx install --force git+https://github.com/yujipeng/wewrite.git
 ```
 
 从 v2.1 及更早版本升级时，install.sh 会自动把仓库里的旧用户状态迁到 `~/.wewrite/`。
 
+## 🗑️ 卸载
+
+```bash
+uv tool uninstall wewrite                        # 或 pipx uninstall wewrite
+rm -f ~/.claude/skills/wewrite* ~/.agents/skills/wewrite*
+rm -rf ~/wewrite                                 # 仓库本体
+```
+
+`~/.wewrite/`（配置、历史、风格库、学习产物）默认保留；确认不再需要时再 `rm -rf ~/.wewrite`。
+
 ## ⭐ Star History
 
-[![Star History](https://raw.githubusercontent.com/imraywang/wewrite/main/docs/star-history.svg)](https://star-history.com/#imraywang/wewrite&Date)
+[![Star History](https://raw.githubusercontent.com/yujipeng/wewrite/main/docs/star-history.svg)](https://star-history.com/#yujipeng/wewrite&Date)
 
 <sub>图表自托管：GitHub 新的 API 限制下，star-history.com 需自备 fine-grained PAT，而 README 嵌入无法安全携带 token——本图由 [CI](.github/workflows/star-history.yml) 用仓库自身 token 每周刷新；点击可看交互版。</sub>
 
