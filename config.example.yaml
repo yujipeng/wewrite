@@ -6,6 +6,13 @@ wechat:
   appid: "wx_your_appid"
   secret: "your_appsecret"
   author: ""  # 默认署名（可选）
+  # 微信 API 端点（可选）。留空 = 直连 https://api.weixin.qq.com。
+  # 若本机出口 IP 不在公众号白名单，可指向自建转发（nginx relay），
+  # 让请求从白名单 IP 出网，例如：
+  # base_url: "https://wx.example.com/relay-path"
+  # 也可用环境变量 WECHAT_API_BASE 覆盖。
+  # SSH 隧道 / Nginx relay 的完整配置与排障：docs/wechat-api-relay.md
+  base_url: ""
 
 # AI 图片生成
 # 支持 10 个 provider，配一个就能用，配多个自动 fallback。

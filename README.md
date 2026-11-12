@@ -136,6 +136,23 @@ cp config.example.yaml ~/.wewrite/config.yaml
 
 填入微信公众号 `appid`/`secret`（推送需要）和图片 API key（生图需要）。**写作不需要这些配置**；排版可以直接生成本地 HTML，请求配图但没有图片服务时会输出图片提示词。配了 `WEWRITE_WRITER_API_KEY` 则正文可交给独立写作模型；实际费用以你使用的服务为准。
 
+### 微信 IP 白名单（errcode 40164）
+
+公众号 API 只接受白名单内 IP 的请求。家用/办公宽带出口 IP 不固定时，推送会返回
+`errcode 40164`。把微信出口换到一台 IP 固定的服务器上即可，`wewrite` 侧只改一个配置项：
+
+```yaml
+wechat:
+  base_url: "https://wx.example.com/relay-path"   # 留空 = 直连 api.weixin.qq.com
+```
+
+两种接法都有完整步骤（白名单、配置示例、验证命令、故障对照表）：
+
+- **SSH 隧道** — 能 SSH 到一台白名单服务器时最快，不在公网开任何端口
+- **Nginx 反向代理** — 有固定公网 IP 时一次配置，多台机器共用
+
+详见 [`docs/wechat-api-relay.md`](https://github.com/imraywang/wewrite/blob/main/docs/wechat-api-relay.md)。
+
 ## 🧩 模块速查
 
 管道的每一段都是独立 skill。每篇文章保存在 `~/.wewrite/runs/<任务编号>/`，进度可恢复，
