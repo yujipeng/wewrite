@@ -67,6 +67,8 @@ def cmd_publish(args):
     secret = args.secret or wechat_cfg.get("secret")
     theme_name = args.theme or cfg.get("theme", "professional-clean")
     author = args.author or wechat_cfg.get("author")
+    # API 端点：nginx relay（留空 = 直连 api.weixin.qq.com）
+    api_base = wechat_cfg.get("base_url")
 
     if not appid or not secret:
         print("Error: --appid and --secret required (or set in config.yaml)", file=sys.stderr)
@@ -83,7 +85,7 @@ def cmd_publish(args):
     print(f"Images found: {len(result.images)}")
 
     # Get access token
-    token = get_access_token(appid, secret)
+    token = get_access_token(appid, secret, base_url=api_base)
     print("Access token obtained.")
 
     # Upload images referenced in article and replace src
@@ -103,7 +105,7 @@ def cmd_publish(args):
 
         if img_path.exists():
             print(f"Uploading image: {img_src}")
-            wechat_url = upload_image(token, str(img_path))
+            wechat_url = upload_image(token, str(img_path), base_url=api_base)
             html = html.replace(img_src, wechat_url)
             print(f"  -> {wechat_url}")
         else:
@@ -113,7 +115,7 @@ def cmd_publish(args):
     thumb_media_id = None
     if args.cover:
         print(f"Uploading cover: {args.cover}")
-        thumb_media_id = upload_thumb(token, args.cover)
+        thumb_media_id = upload_thumb(token, args.cover, base_url=api_base)
         print(f"  -> media_id: {thumb_media_id}")
 
     # Create draft
@@ -126,6 +128,7 @@ def cmd_publish(args):
         digest=digest,
         thumb_media_id=thumb_media_id,
         author=author,
+        base_url=api_base,
     )
 
     print(f"\nDraft created! media_id: {draft.media_id}")
@@ -146,6 +149,8 @@ def cmd_image_post(args):
 
     appid = args.appid or wechat_cfg.get("appid")
     secret = args.secret or wechat_cfg.get("secret")
+    # API 端点：nginx relay（留空 = 直连 api.weixin.qq.com）
+    api_base = wechat_cfg.get("base_url")
 
     if not appid or not secret:
         print("Error: --appid and --secret required (or set in config.yaml)", file=sys.stderr)
@@ -159,7 +164,7 @@ def cmd_image_post(args):
         print(f"Error: max 20 images, got {len(images)}", file=sys.stderr)
         sys.exit(1)
 
-    token = get_access_token(appid, secret)
+    token = get_access_token(appid, secret, base_url=api_base)
     print(f"Uploading {len(images)} images as permanent materials...")
 
     media_ids = []
@@ -169,7 +174,7 @@ def cmd_image_post(args):
             print(f"Error: image not found: {img_path}", file=sys.stderr)
             sys.exit(1)
         print(f"  Uploading: {p.name}")
-        mid = upload_thumb(token, str(p))
+        mid = upload_thumb(token, str(p), base_url=api_base)
         media_ids.append(mid)
         print(f"    -> {mid}")
 
@@ -186,6 +191,7 @@ def cmd_image_post(args):
         image_media_ids=media_ids,
         content=content,
         open_comment=True,
+        base_url=api_base,
     )
 
     print(f"\nImage post draft created!")

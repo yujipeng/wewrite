@@ -1,14 +1,42 @@
+import os
 import time
 import mimetypes
 import requests
 from pathlib import Path
 from dataclasses import dataclass
+from typing import Optional
 
 # Token cache
 _token_cache: dict = {}
 
 # Unified timeout for WeChat API calls
 API_TIMEOUT = 30
+
+# Default WeChat API endpoint (direct connection)
+DEFAULT_API_BASE = "https://api.weixin.qq.com"
+
+# Environment variable that overrides the API endpoint
+API_BASE_ENV = "WECHAT_API_BASE"
+
+
+def resolve_api_base(base_url: Optional[str] = None) -> str:
+    """
+    Resolve the WeChat API base URL.
+
+    Priority: explicit argument > env var WECHAT_API_BASE > DEFAULT_API_BASE.
+    Whitespace is stripped and a trailing "/" is removed, so callers can
+    safely build f"{base}/cgi-bin/...".
+
+    Empty/whitespace-only values fall through to the next source, which keeps
+    the "leave it blank in config.yaml to connect directly" contract working.
+    """
+    for candidate in (base_url, os.environ.get(API_BASE_ENV)):
+        if candidate is None:
+            continue
+        cleaned = str(candidate).strip().rstrip("/")
+        if cleaned:
+            return cleaned
+    return DEFAULT_API_BASE
 
 
 @dataclass
@@ -19,13 +47,20 @@ class TokenResult:
     secret: str
 
 
-def get_access_token(appid: str, secret: str, force_refresh: bool = False) -> str:
+def get_access_token(
+    appid: str,
+    secret: str,
+    force_refresh: bool = False,
+    base_url: Optional[str] = None,
+) -> str:
     """
     Get access_token with caching and auto-refresh.
     Cache key: appid
     API: GET https://api.weixin.qq.com/cgi-bin/token
     Cache until expires_in - 300 seconds (5 min buffer).
     Raise ValueError on API error.
+
+    base_url overrides the endpoint (e.g. an nginx relay); see resolve_api_base.
     """
     now = time.time()
 
@@ -35,7 +70,7 @@ def get_access_token(appid: str, secret: str, force_refresh: bool = False) -> st
             return cached.access_token
 
     resp = requests.get(
-        "https://api.weixin.qq.com/cgi-bin/token",
+        f"{resolve_api_base(base_url)}/cgi-bin/token",
         params={
             "grant_type": "client_credential",
             "appid": appid,
@@ -63,7 +98,11 @@ def get_access_token(appid: str, secret: str, force_refresh: bool = False) -> st
     return access_token
 
 
-def ensure_valid_token(appid: str, secret: str) -> str:
+def ensure_valid_token(
+    appid: str,
+    secret: str,
+    base_url: Optional[str] = None,
+) -> str:
     """Get a valid token, force-refreshing if near expiry.
 
     Use this instead of get_access_token for long-running operations
@@ -73,9 +112,9 @@ def ensure_valid_token(appid: str, secret: str) -> str:
     if appid in _token_cache:
         cached = _token_cache[appid]
         if now >= cached.expires_at:
-            return get_access_token(appid, secret, force_refresh=True)
+            return get_access_token(appid, secret, force_refresh=True, base_url=base_url)
         return cached.access_token
-    return get_access_token(appid, secret)
+    return get_access_token(appid, secret, base_url=base_url)
 
 
 def _guess_content_type(file_path: str) -> str:
@@ -84,7 +123,7 @@ def _guess_content_type(file_path: str) -> str:
     return content_type or "application/octet-stream"
 
 
-def upload_image(access_token: str, image_path: str) -> str:
+def upload_image(access_token: str, image_path: str, base_url: Optional[str] = None) -> str:
     """
     Upload image for use inside article content.
     API: POST https://api.weixin.qq.com/cgi-bin/media/uploadimg
@@ -96,7 +135,7 @@ def upload_image(access_token: str, image_path: str) -> str:
 
     with open(path, "rb") as f:
         resp = requests.post(
-            "https://api.weixin.qq.com/cgi-bin/media/uploadimg",
+            f"{resolve_api_base(base_url)}/cgi-bin/media/uploadimg",
             params={"access_token": access_token},
             files={"media": (path.name, f, content_type)},
             timeout=API_TIMEOUT,
@@ -112,7 +151,7 @@ def upload_image(access_token: str, image_path: str) -> str:
     return data["url"]
 
 
-def upload_thumb(access_token: str, image_path: str) -> str:
+def upload_thumb(access_token: str, image_path: str, base_url: Optional[str] = None) -> str:
     """
     Upload cover image as permanent material.
     API: POST https://api.weixin.qq.com/cgi-bin/material/add_material
@@ -124,7 +163,7 @@ def upload_thumb(access_token: str, image_path: str) -> str:
 
     with open(path, "rb") as f:
         resp = requests.post(
-            "https://api.weixin.qq.com/cgi-bin/material/add_material",
+            f"{resolve_api_base(base_url)}/cgi-bin/material/add_material",
             params={"access_token": access_token, "type": "image"},
             files={"media": (path.name, f, content_type)},
             timeout=API_TIMEOUT,

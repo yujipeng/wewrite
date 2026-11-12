@@ -8,6 +8,7 @@ Environment variable mapping:
     WECHAT_APPID          → wechat.appid
     WECHAT_SECRET         → wechat.secret
     WECHAT_AUTHOR         → wechat.author
+    WECHAT_API_BASE       → wechat.base_url（微信 API 端点，如 nginx relay；留空直连）
     WEWRITE_IMAGE_PROVIDER → image.provider
     WEWRITE_IMAGE_API_KEY  → image.api_key
     WEWRITE_IMAGE_MODEL    → image.model
@@ -30,6 +31,7 @@ _ENV_OVERRIDES = {
     ("wechat", "appid"): "WECHAT_APPID",
     ("wechat", "secret"): "WECHAT_SECRET",
     ("wechat", "author"): "WECHAT_AUTHOR",
+    ("wechat", "base_url"): "WECHAT_API_BASE",
     ("image", "provider"): "WEWRITE_IMAGE_PROVIDER",
     ("image", "api_key"): "WEWRITE_IMAGE_API_KEY",
     ("image", "model"): "WEWRITE_IMAGE_MODEL",

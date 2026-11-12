@@ -4,6 +4,8 @@ import requests
 from dataclasses import dataclass
 from typing import Optional
 
+from .wechat_api import resolve_api_base
+
 
 @dataclass
 class DraftResult:
@@ -23,12 +25,15 @@ def create_draft(
     digest: str,
     thumb_media_id: Optional[str] = None,
     author: Optional[str] = None,
+    base_url: Optional[str] = None,
 ) -> DraftResult:
     """
     Create a draft in WeChat.
     API: POST https://api.weixin.qq.com/cgi-bin/draft/add
     Returns DraftResult.
     Raise ValueError on error (errcode present and != 0).
+
+    base_url overrides the endpoint (e.g. an nginx relay).
     """
     if not thumb_media_id:
         raise ValueError("A cover image is required to create a WeChat draft")
@@ -49,7 +54,7 @@ def create_draft(
     # and WeChat stores the escape sequences literally, causing title
     # length overflow and garbled content.
     resp = requests.post(
-        "https://api.weixin.qq.com/cgi-bin/draft/add",
+        f"{resolve_api_base(base_url)}/cgi-bin/draft/add",
         params={"access_token": access_token},
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         headers={"Content-Type": "application/json; charset=utf-8"},
@@ -69,14 +74,14 @@ def create_draft(
     return DraftResult(media_id=data["media_id"])
 
 
-def get_draft(access_token: str, media_id: str) -> str:
+def get_draft(access_token: str, media_id: str, base_url: Optional[str] = None) -> str:
     """
     Get draft content from WeChat by media_id.
     API: POST https://api.weixin.qq.com/cgi-bin/draft/get
     Returns the HTML content of the first article.
     """
     resp = requests.post(
-        "https://api.weixin.qq.com/cgi-bin/draft/get",
+        f"{resolve_api_base(base_url)}/cgi-bin/draft/get",
         params={"access_token": access_token},
         json={"media_id": media_id},
         timeout=30,
@@ -121,6 +126,7 @@ def create_image_post(
     content: str = "",
     open_comment: bool = False,
     fans_only_comment: bool = False,
+    base_url: Optional[str] = None,
 ) -> ImagePostResult:
     """
     Create a WeChat image post (小绿书/图片帖) draft.
@@ -162,7 +168,7 @@ def create_image_post(
     body = {"articles": [article]}
 
     resp = requests.post(
-        "https://api.weixin.qq.com/cgi-bin/draft/add",
+        f"{resolve_api_base(base_url)}/cgi-bin/draft/add",
         params={"access_token": access_token},
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         headers={"Content-Type": "application/json; charset=utf-8"},

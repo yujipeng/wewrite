@@ -25,13 +25,14 @@ from ..paths import history_path
 
 # Import unified config loader
 from ..toolkit.config import load_config, get_wechat_credentials
+from ..toolkit.wechat_api import resolve_api_base
 
 API_TIMEOUT = 30
 
 
-def _get_access_token(appid: str, secret: str) -> str:
+def _get_access_token(appid: str, secret: str, base_url: str | None = None) -> str:
     resp = requests.get(
-        "https://api.weixin.qq.com/cgi-bin/token",
+        f"{resolve_api_base(base_url)}/cgi-bin/token",
         params={"grant_type": "client_credential", "appid": appid, "secret": secret},
         timeout=API_TIMEOUT,
     )
@@ -41,14 +42,14 @@ def _get_access_token(appid: str, secret: str) -> str:
     return data["access_token"]
 
 
-def fetch_article_summary(token: str, date: str) -> list[dict]:
+def fetch_article_summary(token: str, date: str, base_url: str | None = None) -> list[dict]:
     """
     Fetch daily article summary.
     API: POST /datacube/getarticlesummary
     date format: "2026-03-23"
     """
     resp = requests.post(
-        "https://api.weixin.qq.com/datacube/getarticlesummary",
+        f"{resolve_api_base(base_url)}/datacube/getarticlesummary",
         params={"access_token": token},
         json={"begin_date": date, "end_date": date},
         timeout=API_TIMEOUT,
@@ -64,13 +65,13 @@ def fetch_article_summary(token: str, date: str) -> list[dict]:
     return data["list"]
 
 
-def fetch_article_total(token: str, date: str) -> list[dict]:
+def fetch_article_total(token: str, date: str, base_url: str | None = None) -> list[dict]:
     """
     Fetch cumulative article stats.
     API: POST /datacube/getarticletotal
     """
     resp = requests.post(
-        "https://api.weixin.qq.com/datacube/getarticletotal",
+        f"{resolve_api_base(base_url)}/datacube/getarticletotal",
         params={"access_token": token},
         json={"begin_date": date, "end_date": date},
         timeout=API_TIMEOUT,
@@ -156,13 +157,16 @@ def main():
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    token = _get_access_token(appid, secret)
+    # wechat.base_url（或环境变量 WECHAT_API_BASE）可指向 nginx relay
+    api_base = load_config().get("wechat", {}).get("base_url")
+
+    token = _get_access_token(appid, secret, base_url=api_base)
     print(f"Fetching stats for last {args.days} days...")
 
     all_stats = []
     for i in range(args.days):
         date = (datetime.now() - timedelta(days=i + 1)).strftime("%Y-%m-%d")
-        stats = fetch_article_summary(token, date)
+        stats = fetch_article_summary(token, date, base_url=api_base)
         if stats:
             print(f"  {date}: {len(stats)} article(s)")
             all_stats.extend(stats)

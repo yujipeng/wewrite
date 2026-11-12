@@ -88,6 +88,7 @@ def fetch_wechat_draft() -> tuple[str, str, str]:
     wechat = config.get("wechat", {})
     appid = wechat.get("appid", "")
     secret = wechat.get("secret", "")
+    base_url = wechat.get("base_url")
     if not appid or not secret:
         raise ValueError("config.yaml missing wechat.appid or wechat.secret")
 
@@ -129,8 +130,8 @@ def fetch_wechat_draft() -> tuple[str, str, str]:
     from ..toolkit.wechat_api import get_access_token
     from ..toolkit.publisher import get_draft, html_to_plaintext
 
-    token = get_access_token(appid, secret)
-    html = get_draft(token, media_id)
+    token = get_access_token(appid, secret, base_url=base_url)
+    html = get_draft(token, media_id, base_url=base_url)
     wechat_text = html_to_plaintext(html)
 
     # Convert local draft to plaintext
