@@ -72,3 +72,25 @@ def test_visual_contract_enforces_count_and_cost_limits():
     assert "--max-images" in visual
     assert "--max-cost" in visual
     assert "不能绕过上限" in visual
+
+
+def test_image_post_is_a_separate_flow_without_theme_rendering():
+    main = _read("skills/wewrite/SKILL.md")
+    imagepost = _read("skills/wewrite-imagepost/SKILL.md")
+    playbook = _read("skills/wewrite-imagepost/references/image-post-playbook.md")
+    publish = _read("skills/wewrite-publish/SKILL.md")
+
+    assert "贴图、小绿书、图片帖" in main
+    assert "wewrite-imagepost" in main
+    assert "转 `wewrite-imagepost`" in publish
+
+    assert "不套排版主题、不生成 HTML" in imagepost
+    assert "--content-type image_post" in imagepost
+    assert "artifacts.image_plan" in imagepost
+    assert "artifacts.post_meta" in imagepost
+    assert "wewrite image-post-check --post" in imagepost
+    assert "wewrite run permission publish allow" in imagepost
+    assert "image-post.yaml" in imagepost
+    assert "1–20 张" in imagepost
+    assert "newspic" in imagepost
+    assert "3:4" in playbook

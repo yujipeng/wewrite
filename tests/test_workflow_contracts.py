@@ -1,4 +1,5 @@
 import io
+import json
 import yaml
 import pytest
 from PIL import Image
@@ -286,7 +287,8 @@ def test_v2_run_is_upgraded_for_current_artifacts(tmp_path, monkeypatch):
     state_path.write_text(yaml.safe_dump(legacy, allow_unicode=True), encoding="utf-8")
 
     upgraded = load_run(run["run_id"])
-    assert upgraded["version"] == 4
+    assert upgraded["version"] == 5
+    assert upgraded["content_type"] == "article"
     assert upgraded["artifacts"]["brief"].endswith("brief.yaml")
     assert upgraded["artifacts"]["claims"].endswith("claims.yaml")
     assert upgraded["artifacts"]["draft"].endswith("draft.md")
@@ -424,3 +426,174 @@ def test_wechat_draft_requires_cover_and_uses_timeout(monkeypatch):
     monkeypatch.setattr(publisher.requests, "post", fake_post)
     publisher.create_draft("token", "title", "<p>x</p>", "digest", "cover")
     assert captured["timeout"] == 30
+
+
+def test_image_post_run_uses_post_artifacts_and_finishes(tmp_path, monkeypatch):
+    monkeypatch.setenv("WEWRITE_HOME", str(tmp_path))
+    run = create_run(topic="贴图测试", content_type="image_post")
+    assert run["content_type"] == "image_post"
+    assert run["visual"]["max_images"] == 9
+    assert run["artifacts"]["post_meta"].endswith("image-post.yaml")
+    assert "article" not in run["artifacts"]
+
+    workdir = tmp_path / "runs" / run["run_id"]
+    image = workdir / "images" / "01.jpg"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(_png_bytes())
+    (workdir / "image-post.yaml").write_text(
+        yaml.safe_dump({
+            "title": "周末探店",
+            "content": "第一张：门口\n第二张：招牌菜",
+            "images": [{"path": "images/01.jpg"}, {"path": str(image)}],
+        }, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    mark_step("plan", "completed")
+    mark_step("copy", "completed")
+    mark_step("images", "completed")
+    with pytest.raises(ValueError, match="review passes"):
+        finish_run(run_id=run["run_id"])
+
+    update_run({"review": {"decision": "pass", "publishable": True}}, run["run_id"])
+    finished = finish_run(run_id=run["run_id"])
+    assert finished["status"] == "completed"
+    assert finished["post"] == {"title": "周末探店", "image_count": 2}
+
+    history = load_history(tmp_path / "history.yaml")["articles"][0]
+    assert history["content_type"] == "image_post"
+    assert history["title"] == "周末探店"
+    assert history["image_count"] == 2
+
+    mark_step("publish", "in_progress")
+    mark_step("publish", "completed")
+    with pytest.raises(ValueError, match="images or publish"):
+        mark_step("plan", "completed", run["run_id"])
+
+
+def test_image_post_run_has_its_own_step_vocabulary(tmp_path, monkeypatch):
+    monkeypatch.setenv("WEWRITE_HOME", str(tmp_path))
+    run = create_run(content_type="image_post")
+    with pytest.raises(ValueError, match="Unknown image_post step: write"):
+        mark_step("write", "in_progress", run["run_id"])
+    with pytest.raises(ValueError, match="max_images"):
+        create_run(content_type="image_post", max_images=21)
+    with pytest.raises(ValueError, match="Unknown content type"):
+        create_run(content_type="video")
+
+
+def test_image_post_finish_validates_meta_and_images(tmp_path, monkeypatch):
+    monkeypatch.setenv("WEWRITE_HOME", str(tmp_path))
+    run = create_run(content_type="image_post")
+    workdir = tmp_path / "runs" / run["run_id"]
+    meta_path = workdir / "image-post.yaml"
+
+    update_run({"review": {"decision": "pass", "publishable": True}}, run["run_id"])
+    with pytest.raises(ValueError, match="image-post.yaml is saved"):
+        finish_run(run_id=run["run_id"])
+
+    meta_path.write_text(yaml.safe_dump({"title": "标题", "images": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="at least one image"):
+        finish_run(run_id=run["run_id"])
+
+    meta_path.write_text(
+        yaml.safe_dump({"title": "标题", "images": [{"path": "missing.jpg"}]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="not found"):
+        finish_run(run_id=run["run_id"])
+
+    meta_path.write_text(
+        yaml.safe_dump({"title": "长" * 33, "images": [{"path": "missing.jpg"}]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="32 characters"):
+        finish_run(run_id=run["run_id"])
+
+
+def _post_image(tmp_path, name="01.png", size=(600, 800), color="blue"):
+    buf = io.BytesIO()
+    Image.new("RGB", size, color).save(buf, "PNG")
+    path = tmp_path / name
+    path.write_bytes(buf.getvalue())
+    return path
+
+
+def test_image_post_body_includes_cover_info_and_validates_limits():
+    body = publisher.build_image_post_body("标题", ["m1", "m2"], "正文", cover_ratio="1_1")
+    article = body["articles"][0]
+    assert article["article_type"] == "newspic"
+    assert [item["image_media_id"] for item in article["image_info"]["image_list"]] == ["m1", "m2"]
+    assert article["cover_info"]["crop_percent_list"][0] == {
+        "ratio": "1_1", "x1": "0", "y1": "0", "x2": "1", "y2": "1",
+    }
+
+    with pytest.raises(ValueError, match="Unsupported cover ratio"):
+        publisher.build_image_post_body("标题", ["m1"], cover_ratio="3_4")
+    with pytest.raises(ValueError, match="32"):
+        publisher.build_image_post_body("长" * 33, ["m1"])
+    with pytest.raises(ValueError, match="Max 20 images"):
+        publisher.build_image_post_body("标题", ["m"] * 21)
+    with pytest.raises(ValueError, match="plain text"):
+        publisher.build_image_post_body("标题", ["m1"], content=["not", "text"])
+
+
+def test_image_post_create_posts_utf8_and_returns_media_ids(monkeypatch):
+    captured = {}
+
+    class Response:
+        def json(self):
+            return {"media_id": "draft-1"}
+
+    def fake_post(*args, **kwargs):
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setattr(publisher.requests, "post", fake_post)
+    result = publisher.create_image_post("token", "标题", ["m1", "m2"], "正文")
+
+    assert result.media_id == "draft-1"
+    assert result.image_media_ids == ["m1", "m2"]
+    payload = json.loads(captured["data"].decode("utf-8"))
+    assert payload["articles"][0]["title"] == "标题"
+    assert captured["timeout"] == 30
+
+
+def test_upload_image_assets_reuses_media_cache(tmp_path, monkeypatch):
+    image = _post_image(tmp_path)
+    calls = []
+
+    def fake_upload(token, path, base_url=None):
+        calls.append(path)
+        return f"media-{len(calls)}"
+
+    monkeypatch.setattr(publisher, "upload_thumb", fake_upload)
+    cache = str(tmp_path / "media-cache.json")
+
+    first = publisher.upload_image_assets("token", [str(image)], cache_path=cache)
+    second = publisher.upload_image_assets("token", [str(image)], cache_path=cache)
+
+    assert len(calls) == 1
+    assert first[0]["media_id"] == second[0]["media_id"] == "media-1"
+    assert first[0]["cached"] is False
+    assert second[0]["cached"] is True
+
+
+def test_check_image_post_flags_errors_and_ratio_warnings(tmp_path):
+    portrait = _post_image(tmp_path, "portrait.png", (600, 800))
+    square = _post_image(tmp_path, "square.png", (800, 800))
+
+    ok = publisher.check_image_post("标题", [str(portrait)], "正文")
+    assert ok["ok"] is True
+    assert ok["errors"] == []
+
+    broken = publisher.check_image_post("", [], "")
+    assert broken["ok"] is False
+    assert len(broken["errors"]) >= 2
+
+    warned = publisher.check_image_post("标题", [str(square)], "")
+    assert warned["ok"] is True
+    assert any("3:4" in item for item in warned["warnings"])
+
+    html = publisher.check_image_post("标题", [str(portrait)], "<p>段落</p>")
+    assert any("HTML" in item for item in html["warnings"])

@@ -17,8 +17,9 @@ from .paths import current_run_path, ensure_home, home, runs_dir
 
 RUN_ID_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-[a-f0-9]{6}$")
 RUN_MODES = {"draft", "complete", "publish"}
+CONTENT_TYPES = {"article", "image_post"}
 VISUAL_MODES = {"none", "cover", "full", "prompts"}
-PROTECTED_FIELDS = {"run_id", "created", "status", "mode", "permissions"}
+PROTECTED_FIELDS = {"run_id", "created", "status", "mode", "content_type", "permissions"}
 PROTECTED_ARTIFACTS = {
     "article",
     "brief",
@@ -30,9 +31,22 @@ PROTECTED_ARTIFACTS = {
     "review_report",
     "sources",
     "preview",
+    "image_post",
+    "post_meta",
+    "image_plan",
+    "media_cache",
 }
 POST_COMPLETION_FIELDS = {"visual", "images", "publish"}
-POST_COMPLETION_STEPS = {"visual", "publish"}
+# Follow-up steps allowed after a run is completed, per content type.
+POST_COMPLETION_STEPS = {
+    "article": ("visual", "publish"),
+    "image_post": ("images", "publish"),
+}
+# Canonical step names per content type.
+RUN_STEPS = {
+    "article": ("topic", "write", "review", "visual", "publish"),
+    "image_post": ("plan", "copy", "images", "review", "publish"),
+}
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -108,24 +122,58 @@ def resolve_run_id(run_id: str | None = None) -> str:
     raise ValueError("Multiple active runs. Choose one with `wewrite run resume <run_id>`.")
 
 
+def _default_artifacts(directory: Path, content_type: str) -> dict:
+    """Return the immutable artifact map for a run's content type."""
+    common = {
+        "sources": str((directory / "sources.yaml").relative_to(home())),
+        "preview": str((directory / "preview.html").relative_to(home())),
+    }
+    if content_type == "image_post":
+        return {
+            **common,
+            "image_post": str((directory / "image-post.md").relative_to(home())),
+            "post_meta": str((directory / "image-post.yaml").relative_to(home())),
+            "image_plan": str((directory / "image-plan.md").relative_to(home())),
+            "images_manifest": str((directory / "images.json").relative_to(home())),
+            "media_cache": str((directory / "media-cache.json").relative_to(home())),
+        }
+    return {
+        **common,
+        "article": str((directory / "article.md").relative_to(home())),
+        "brief": str((directory / "brief.yaml").relative_to(home())),
+        "claims": str((directory / "claims.yaml").relative_to(home())),
+        "draft": str((directory / "draft.md").relative_to(home())),
+        "illustrated_article": str((directory / "article-illustrated.md").relative_to(home())),
+        "image_prompts": str((directory / "image-prompts.md").relative_to(home())),
+        "images_manifest": str((directory / "images.json").relative_to(home())),
+        "review_report": str((directory / "review-report.json").relative_to(home())),
+    }
+
+
 def create_run(
     *,
     topic: str = "",
     mode: str = "draft",
+    content_type: str = "article",
     visual_mode: str | None = None,
-    max_images: int = 4,
+    max_images: int | None = None,
     max_image_cost: float | None = None,
     allow_publish: bool = False,
 ) -> dict:
     ensure_home()
     if mode not in RUN_MODES:
         raise ValueError(f"Unknown mode: {mode}")
+    if content_type not in CONTENT_TYPES:
+        raise ValueError(f"Unknown content type: {content_type}")
     if visual_mode is None:
         visual_mode = "none"
     if visual_mode not in VISUAL_MODES:
         raise ValueError(f"Unknown visual mode: {visual_mode}")
-    if max_images < 0 or max_images > 10:
-        raise ValueError("max_images must be between 0 and 10")
+    if max_images is None:
+        max_images = 9 if content_type == "image_post" else 4
+    max_image_limit = 20 if content_type == "image_post" else 10
+    if max_images < 0 or max_images > max_image_limit:
+        raise ValueError(f"max_images must be between 0 and {max_image_limit}")
     if max_image_cost is not None and max_image_cost < 0:
         raise ValueError("max_image_cost must be non-negative")
     if mode == "publish":
@@ -136,12 +184,13 @@ def create_run(
     directory.mkdir(parents=True, exist_ok=False)
     created = _now()
     state = {
-        "version": 4,
+        "version": 5,
         "run_id": run_id,
         "created": created,
         "updated": created,
         "status": "active",
         "mode": mode,
+        "content_type": content_type,
         "permissions": {"publish": bool(allow_publish)},
         "visual": {
             "mode": visual_mode,
@@ -154,18 +203,7 @@ def create_run(
             "source": "用户指定" if topic else "",
             "framework_hint": "",
         },
-        "artifacts": {
-            "article": str((directory / "article.md").relative_to(home())),
-            "brief": str((directory / "brief.yaml").relative_to(home())),
-            "claims": str((directory / "claims.yaml").relative_to(home())),
-            "draft": str((directory / "draft.md").relative_to(home())),
-            "illustrated_article": str((directory / "article-illustrated.md").relative_to(home())),
-            "image_prompts": str((directory / "image-prompts.md").relative_to(home())),
-            "images_manifest": str((directory / "images.json").relative_to(home())),
-            "review_report": str((directory / "review-report.json").relative_to(home())),
-            "sources": str((directory / "sources.yaml").relative_to(home())),
-            "preview": str((directory / "preview.html").relative_to(home())),
-        },
+        "artifacts": _default_artifacts(directory, content_type),
         "steps": {},
         "last_error": None,
     }
@@ -205,23 +243,20 @@ def _upgrade_state(state: dict) -> bool:
     """Add current artifact paths to older run state without changing source artifacts."""
     run_id = state["run_id"]
     directory = run_dir(run_id)
-    artifacts = state.setdefault("artifacts", {})
-    expected = {
-        "brief": str((directory / "brief.yaml").relative_to(home())),
-        "claims": str((directory / "claims.yaml").relative_to(home())),
-        "draft": str((directory / "draft.md").relative_to(home())),
-        "illustrated_article": str((directory / "article-illustrated.md").relative_to(home())),
-        "image_prompts": str((directory / "image-prompts.md").relative_to(home())),
-        "images_manifest": str((directory / "images.json").relative_to(home())),
-        "review_report": str((directory / "review-report.json").relative_to(home())),
-    }
     changed = False
+    content_type = state.get("content_type")
+    if content_type not in CONTENT_TYPES:
+        state["content_type"] = "article"
+        content_type = "article"
+        changed = True
+    artifacts = state.setdefault("artifacts", {})
+    expected = _default_artifacts(directory, content_type)
     for key, value in expected.items():
         if not artifacts.get(key):
             artifacts[key] = value
             changed = True
-    if state.get("version", 1) < 4:
-        state["version"] = 4
+    if state.get("version", 1) < 5:
+        state["version"] = 5
         changed = True
     return changed
 
@@ -229,6 +264,7 @@ def _upgrade_state(state: dict) -> bool:
 def update_run(patch: dict, run_id: str | None = None, *, _control: bool = False) -> dict:
     state = load_run(run_id)
     if state.get("status") == "completed":
+        content_type = state.get("content_type", "article")
         allowed = {"steps", "last_error"} if _control else POST_COMPLETION_FIELDS
         blocked = set(patch) - allowed
         if blocked:
@@ -238,8 +274,10 @@ def update_run(patch: dict, run_id: str | None = None, *, _control: bool = False
             )
         if _control:
             steps = patch.get("steps", {})
-            if not isinstance(steps, dict) or set(steps) - POST_COMPLETION_STEPS:
-                raise ValueError("Completed runs only accept visual or publish step updates.")
+            allowed_steps = set(POST_COMPLETION_STEPS[content_type])
+            if not isinstance(steps, dict) or set(steps) - allowed_steps:
+                follow = " or ".join(POST_COMPLETION_STEPS[content_type])
+                raise ValueError(f"Completed runs only accept {follow} step updates.")
     if not _control:
         blocked = PROTECTED_FIELDS.intersection(patch)
         if blocked:
@@ -260,9 +298,14 @@ def mark_step(step: str, status: str, run_id: str | None = None, error: str | No
     if status not in {"pending", "in_progress", "completed", "failed", "skipped"}:
         raise ValueError(f"Unknown step status: {status}")
     state = load_run(run_id)
+    content_type = state.get("content_type", "article")
+    if step not in RUN_STEPS[content_type]:
+        raise ValueError(f"Unknown {content_type} step: {step}")
     completed = state.get("status") == "completed"
-    if completed and step not in POST_COMPLETION_STEPS:
-        raise ValueError("Completed runs only accept visual or publish step updates.")
+    follow_ups = POST_COMPLETION_STEPS[content_type]
+    if completed and step not in follow_ups:
+        follow = " or ".join(follow_ups)
+        raise ValueError(f"Completed runs only accept {follow} step updates.")
     patch = {"steps": {step: {"status": status, "updated": _now()}}}
     if error:
         patch["steps"][step]["error"] = error
@@ -316,13 +359,15 @@ def _history_entry(state: dict) -> dict:
     seo = state.get("seo") or {}
     publish = state.get("publish") or {}
     artifacts = state.get("artifacts") or {}
+    post = state.get("post") or {}
     return {
         "run_id": state["run_id"],
         "date": state.get("created", "")[:10],
-        "title": seo.get("title") or topic.get("title") or "未命名文章",
+        "content_type": state.get("content_type", "article"),
+        "title": seo.get("title") or post.get("title") or topic.get("title") or "未命名文章",
         "topic_source": topic.get("source"),
         "topic_keywords": topic.get("keywords", []),
-        "output_file": artifacts.get("article"),
+        "output_file": artifacts.get("article") or artifacts.get("image_post"),
         "draft_file": artifacts.get("draft"),
         "brief_file": artifacts.get("brief"),
         "review_file": artifacts.get("review_report"),
@@ -330,6 +375,7 @@ def _history_entry(state: dict) -> dict:
         "framework": state.get("framework"),
         "enhance_strategy": state.get("enhance_strategy"),
         "word_count": state.get("word_count", 0),
+        "image_count": post.get("image_count"),
         "media_id": publish.get("media_id"),
         "writing_persona": state.get("persona"),
         "dimensions": state.get("dimensions", []),
@@ -342,20 +388,7 @@ def _history_entry(state: dict) -> dict:
     }
 
 
-def finish_run(patch: dict | None = None, run_id: str | None = None) -> dict:
-    state = load_run(run_id)
-    if state.get("status") == "completed":
-        return state
-    if patch:
-        blocked = PROTECTED_FIELDS.intersection(patch)
-        if blocked:
-            raise ValueError(
-                "Protected run fields cannot be changed: " + ", ".join(sorted(blocked))
-            )
-        artifact_patch = patch.get("artifacts", {})
-        if isinstance(artifact_patch, dict) and PROTECTED_ARTIFACTS.intersection(artifact_patch):
-            raise ValueError("Core artifact paths are immutable")
-        _deep_merge(state, patch)
+def _validate_article(state: dict) -> None:
     article_rel = (state.get("artifacts") or {}).get("article")
     article_path = home() / article_rel if article_rel else None
     if not article_path or not article_path.is_file() or not article_path.read_text(encoding="utf-8").strip():
@@ -377,6 +410,56 @@ def finish_run(patch: dict | None = None, run_id: str | None = None) -> dict:
             or report.get("publishable") is not True
         ):
             raise ValueError("Cannot finish a drafted article before editorial review passes")
+
+
+def _validate_image_post(state: dict) -> None:
+    """Validate image-post.yaml, referenced images, and the light review gate."""
+    artifacts = state.get("artifacts") or {}
+    meta_rel = artifacts.get("post_meta")
+    meta_path = home() / meta_rel if meta_rel else None
+    if not meta_path or not meta_path.is_file():
+        raise ValueError("Cannot finish image post before image-post.yaml is saved")
+    try:
+        meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"Cannot read image-post.yaml: {exc}") from exc
+    if not isinstance(meta, dict):
+        raise ValueError("image-post.yaml must be a mapping")
+
+    title = str(meta.get("title") or "").strip()
+    if not title:
+        raise ValueError("image-post.yaml must contain a non-empty title")
+    if len(title) > 32:
+        raise ValueError("Image post title must be at most 32 characters")
+
+    content = meta.get("content")
+    if content is not None and not isinstance(content, str):
+        raise ValueError("image-post.yaml content must be plain text")
+
+    images = meta.get("images")
+    if not isinstance(images, list) or not images:
+        raise ValueError("image-post.yaml must contain at least one image")
+    if len(images) > 20:
+        raise ValueError("Image post supports at most 20 images")
+    for index, item in enumerate(images, start=1):
+        raw = item.get("path") if isinstance(item, dict) else item
+        if not raw or not isinstance(raw, str):
+            raise ValueError(f"Image #{index} is missing a path")
+        image_path = Path(raw).expanduser()
+        if not image_path.is_absolute():
+            image_path = meta_path.parent / image_path
+        if not image_path.is_file():
+            raise ValueError(f"Image #{index} not found: {raw}")
+
+    review = state.get("review") or meta.get("review") or {}
+    if review.get("decision") != "pass" or review.get("publishable") is not True:
+        raise ValueError("Cannot finish an image post before review passes")
+
+    state["post"] = {"title": title, "image_count": len(images)}
+    state["word_count"] = len(content or "")
+
+
+def _finalize_run(state: dict) -> dict:
     sources_file = run_dir(state["run_id"]) / "sources.yaml"
     if sources_file.exists():
         source_data = yaml.safe_load(sources_file.read_text(encoding="utf-8")) or {}
@@ -393,6 +476,27 @@ def finish_run(patch: dict | None = None, run_id: str | None = None) -> dict:
     _write_state(state)
     upsert_article(_history_entry(state))
     return state
+
+
+def finish_run(patch: dict | None = None, run_id: str | None = None) -> dict:
+    state = load_run(run_id)
+    if state.get("status") == "completed":
+        return state
+    if patch:
+        blocked = PROTECTED_FIELDS.intersection(patch)
+        if blocked:
+            raise ValueError(
+                "Protected run fields cannot be changed: " + ", ".join(sorted(blocked))
+            )
+        artifact_patch = patch.get("artifacts", {})
+        if isinstance(artifact_patch, dict) and PROTECTED_ARTIFACTS.intersection(artifact_patch):
+            raise ValueError("Core artifact paths are immutable")
+        _deep_merge(state, patch)
+    if state.get("content_type") == "image_post":
+        _validate_image_post(state)
+    else:
+        _validate_article(state)
+    return _finalize_run(state)
 
 
 def state_as_json(state: dict) -> str:

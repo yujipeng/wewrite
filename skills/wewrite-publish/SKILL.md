@@ -2,7 +2,7 @@
 name: wewrite-publish
 description: |
   WeWrite 排版发布模块：把 Markdown 做成微信预览，或在用户明确授权后推入公众号草稿箱；
-  也支持主题画廊和图片帖。只处理微信公众号。
+  也支持主题画廊。只处理微信公众号；贴图/图片帖转 wewrite-imagepost。
 allowed-tools:
   - Bash
   - Read
@@ -70,5 +70,5 @@ wewrite run step publish completed
 |---|---|
 | 看主题 | `wewrite gallery` |
 | 换主题 | 重新 preview；只有再次明确要求才重新 publish |
-| 做图片帖 | 先确认用户确实要推草稿箱，再执行 `wewrite image-post` |
+| 做图片帖 | 转 `wewrite-imagepost`；贴图不排版、不套主题 |
 | 只排版 | 只 preview |

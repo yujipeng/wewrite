@@ -34,15 +34,15 @@ _COMMANDS = {
 
 # toolkit/cli.py 自带子命令（preview/publish/gallery/themes/image-post/learn-theme），
 # 这些名字直接整体透传给它。
-_TOOLKIT_PASSTHROUGH = {"preview", "publish", "gallery", "themes", "image-post"}
+_TOOLKIT_PASSTHROUGH = {"preview", "publish", "gallery", "themes", "image-post", "image-post-check"}
 
 
 def _usage() -> str:
     lines = [f"wewrite {__version__} — 公众号内容管道 CLI（状态目录: {home()}）", "", "用法: wewrite <命令> [参数…]", "", "命令:"]
     for name, (_, desc) in _COMMANDS.items():
-        lines.append(f"  {name:<16}{desc}")
+        lines.append(f"  {name:<18}{desc}")
     for name in sorted(_TOOLKIT_PASSTHROUGH):
-        lines.append(f"  {name:<16}排版工具链（toolkit）")
+        lines.append(f"  {name:<18}排版工具链（toolkit）")
     lines += [
         "  home            输出状态目录路径",
         "  migrate         迁移旧版仓库内状态到状态目录",

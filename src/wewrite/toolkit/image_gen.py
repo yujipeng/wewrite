@@ -90,6 +90,12 @@ SIZE_PRESETS = {
         "dashscope": _DEFAULT_SQ, "minimax": _DEFAULT_SQ, "replicate": _DEFAULT_SQ,
         "azure_openai": _DEFAULT_SQ, "openrouter": _DEFAULT_SQ, "jimeng": _DEFAULT_SQ,
     },
+    # 贴图/小绿书：3:4 竖图（首图即封面）
+    "post": {
+        "doubao": "1536x2048", "openai": "1024x1536", "gemini": "1024x1536",
+        "dashscope": "1152x1536", "minimax": "1024x1536", "replicate": "1024x1536",
+        "azure_openai": "1024x1536", "openrouter": "1024x1536", "jimeng": "1024x1536",
+    },
 }
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB

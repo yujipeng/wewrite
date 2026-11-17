@@ -33,8 +33,14 @@ def main(argv=None):
     start = sub.add_parser("start", help="开始一篇新文章")
     start.add_argument("--topic", default="")
     start.add_argument("--mode", choices=["draft", "complete", "publish"], default="draft")
+    start.add_argument(
+        "--content-type",
+        choices=["article", "image_post"],
+        default="article",
+        help="article=常规图文；image_post=贴图/图片消息",
+    )
     start.add_argument("--visual-mode", choices=["none", "cover", "full", "prompts"])
-    start.add_argument("--max-images", type=int, default=4)
+    start.add_argument("--max-images", type=int)
     start.add_argument("--max-image-cost", type=float)
     start.add_argument("--allow-publish", action="store_true")
 
@@ -72,6 +78,7 @@ def main(argv=None):
             state = create_run(
                 topic=args.topic,
                 mode=args.mode,
+                content_type=args.content_type,
                 visual_mode=args.visual_mode,
                 max_images=args.max_images,
                 max_image_cost=args.max_image_cost,

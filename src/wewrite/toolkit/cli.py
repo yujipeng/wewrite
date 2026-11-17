@@ -9,14 +9,23 @@ Usage:
 """
 
 import argparse
+import json
 import sys
 import webbrowser
 from pathlib import Path
 
+import yaml
+
 from .converter import WeChatConverter, make_paste_safe, preview_html
 from .theme import load_theme, list_themes
 from .wechat_api import get_access_token, upload_image, upload_thumb
-from .publisher import create_draft, create_image_post
+from .publisher import (
+    build_image_post_body,
+    check_image_post,
+    create_draft,
+    create_image_post,
+    upload_image_assets,
+)
 from .config import load_config
 
 
@@ -142,63 +151,163 @@ def cmd_themes(args):
         print(f"  {name:24s} {theme.description}")
 
 
+def _parse_crop(value):
+    if not value:
+        return None
+    parts = [part.strip() for part in value.split(",")]
+    if len(parts) != 4:
+        raise ValueError("--crop 需要 x1,y1,x2,y2 四个 0-1 之间的数字")
+    keys = ("x1", "y1", "x2", "y2")
+    return {key: str(float(part)) for key, part in zip(keys, parts)}
+
+
+def _load_post_file(path):
+    """Read image-post.yaml and resolve image paths relative to the file."""
+    post_path = Path(path).expanduser()
+    data = yaml.safe_load(post_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise ValueError("image-post.yaml 必须是映射结构")
+    base = post_path.parent
+    images = []
+    for item in data.get("images") or []:
+        raw = item.get("path") if isinstance(item, dict) else item
+        if not raw:
+            raise ValueError("image-post.yaml 中存在缺少 path 的图片")
+        candidate = Path(str(raw)).expanduser()
+        images.append(str(candidate if candidate.is_absolute() else base / candidate))
+    return {
+        "path": post_path,
+        "title": str(data.get("title") or ""),
+        "content": data.get("content") or "",
+        "images": images,
+        "cover_ratio": data.get("cover_ratio"),
+        "open_comment": bool(data.get("open_comment", True)),
+        "fans_only_comment": bool(data.get("only_fans_can_comment", False)),
+        "media_cache": data.get("media_cache"),
+        "media_id_out": data.get("media_id_out"),
+    }
+
+
+def _post_inputs(args):
+    post = _load_post_file(args.post) if getattr(args, "post", None) else {}
+    title = getattr(args, "title", None) or post.get("title") or ""
+    content = getattr(args, "content", None)
+    if content is None:
+        content = post.get("content", "")
+    images = list(getattr(args, "images", None) or post.get("images") or [])
+    return post, title, content, images
+
+
+def _print_check(result, as_json):
+    if as_json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    for warning in result["warnings"]:
+        print(f"  ⚠ {warning}", file=sys.stderr)
+    for error in result["errors"]:
+        print(f"  ✗ {error}", file=sys.stderr)
+    if result["ok"]:
+        print(f"预检通过：{len(result['images'])} 张图片")
+
+
 def cmd_image_post(args):
-    """Create a WeChat image post (小绿书) from image files."""
+    """Create a WeChat image post (小绿书) from a post file or image paths."""
+    post, title, content, images = _post_inputs(args)
+    cover_ratio = args.cover_ratio or post.get("cover_ratio")
+    crop = _parse_crop(args.crop)
+    open_comment = post.get("open_comment", True) and not args.no_comments
+    fans_only_comment = post.get("fans_only_comment", False)
+
+    check = check_image_post(title, images, content)
+    _print_check(check, as_json=False)
+    if not check["ok"]:
+        sys.exit(1)
+
+    if args.dry_run:
+        media_ids = [f"DRY_RUN_MEDIA_ID_{index}" for index in range(1, len(images) + 1)]
+        body = build_image_post_body(
+            title=title,
+            image_media_ids=media_ids,
+            content=content,
+            cover_ratio=cover_ratio,
+            cover_crop=crop,
+            open_comment=open_comment,
+            fans_only_comment=fans_only_comment,
+        )
+        payload = {"dry_run": True, "images": check["images"], "body": body}
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print("Dry run：未调用微信 API。将提交的 draft/add 请求体：")
+            print(json.dumps(body, ensure_ascii=False, indent=2))
+        return
+
     cfg = load_config()
     wechat_cfg = cfg.get("wechat", {})
-
     appid = args.appid or wechat_cfg.get("appid")
     secret = args.secret or wechat_cfg.get("secret")
-    # API 端点：nginx relay（留空 = 直连 api.weixin.qq.com）
     api_base = wechat_cfg.get("base_url")
-
     if not appid or not secret:
         print("Error: --appid and --secret required (or set in config.yaml)", file=sys.stderr)
         sys.exit(1)
 
-    images = args.images
-    if not images:
-        print("Error: at least 1 image required", file=sys.stderr)
-        sys.exit(1)
-    if len(images) > 20:
-        print(f"Error: max 20 images, got {len(images)}", file=sys.stderr)
-        sys.exit(1)
+    cache_path = args.media_cache or post.get("media_cache")
+    if not cache_path and args.post:
+        cache_path = str(post["path"].parent / "media-cache.json")
 
     token = get_access_token(appid, secret, base_url=api_base)
     print(f"Uploading {len(images)} images as permanent materials...")
-
-    media_ids = []
-    for img_path in images:
-        p = Path(img_path)
-        if not p.exists():
-            print(f"Error: image not found: {img_path}", file=sys.stderr)
-            sys.exit(1)
-        print(f"  Uploading: {p.name}")
-        mid = upload_thumb(token, str(p), base_url=api_base)
-        media_ids.append(mid)
-        print(f"    -> {mid}")
-
-    title = args.title
-    if len(title) > 32:
-        print(f"Warning: title truncated to 32 chars (was {len(title)})")
-        title = title[:32]
-
-    content = args.content or ""
+    uploads = upload_image_assets(token, images, cache_path=cache_path, base_url=api_base)
+    for item in uploads:
+        suffix = " (cached)" if item["cached"] else ""
+        print(f"  {Path(item['path']).name} -> {item['media_id']}{suffix}")
 
     result = create_image_post(
         access_token=token,
         title=title,
-        image_media_ids=media_ids,
+        image_media_ids=[item["media_id"] for item in uploads],
         content=content,
-        open_comment=True,
+        open_comment=open_comment,
+        fans_only_comment=fans_only_comment,
         base_url=api_base,
+        cover_ratio=cover_ratio,
+        cover_crop=crop,
     )
 
-    print(f"\nImage post draft created!")
-    print(f"  media_id: {result.media_id}")
-    print(f"  images: {result.image_count}")
-    print(f"  title: {title}")
-    print(f"  请到公众号后台草稿箱检查并发布")
+    media_id_out = args.media_id_out or post.get("media_id_out")
+    if not media_id_out and args.post:
+        media_id_out = str(post["path"].parent / "image-post-media-id.txt")
+    if media_id_out:
+        out_path = Path(media_id_out).expanduser()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(result.media_id + "\n", encoding="utf-8")
+
+    payload = {
+        "media_id": result.media_id,
+        "image_count": result.image_count,
+        "image_media_ids": result.image_media_ids,
+        "title": title,
+        "images": [item["path"] for item in uploads],
+        "cover_ratio": cover_ratio,
+        "media_id_out": media_id_out or None,
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print("\nImage post draft created!")
+        print(f"  media_id: {result.media_id}")
+        print(f"  images: {result.image_count}")
+        print(f"  title: {title}")
+        print("  请到公众号后台草稿箱检查并发布")
+
+
+def cmd_image_post_check(args):
+    """Preflight an image post without calling WeChat."""
+    _, title, content, images = _post_inputs(args)
+    result = check_image_post(title, images, content)
+    _print_check(result, as_json=args.json)
+    if not result["ok"]:
+        sys.exit(1)
 
 
 def cmd_gallery(args):
@@ -397,11 +506,30 @@ def main():
 
     # image-post (小绿书)
     p_imgpost = sub.add_parser("image-post", help="Create WeChat image post (小绿书)")
-    p_imgpost.add_argument("images", nargs="+", help="Image file paths (1-20, first = cover)")
-    p_imgpost.add_argument("-t", "--title", required=True, help="Post title (max 32 chars)")
-    p_imgpost.add_argument("-c", "--content", default="", help="Plain text description (max ~1000 chars)")
+    p_imgpost.add_argument("images", nargs="*", help="Image file paths (1-20, first = cover)")
+    p_imgpost.add_argument("-t", "--title", default=None, help="Post title (max 32 chars)")
+    p_imgpost.add_argument("-c", "--content", default=None, help="Plain text description (max ~1000 chars)")
+    p_imgpost.add_argument("--post", default=None, help="image-post.yaml 路径（标题/正文/图片/裁剪）")
+    p_imgpost.add_argument(
+        "--cover-ratio", choices=["1_1", "16_9", "2.35_1"], default=None,
+        help="封面裁剪比例（写入 cover_info）",
+    )
+    p_imgpost.add_argument("--crop", default=None, help="显式裁剪框 x1,y1,x2,y2（0-1）")
+    p_imgpost.add_argument("--media-cache", default=None, help="永久素材 media_id 缓存（重试幂等）")
+    p_imgpost.add_argument("--media-id-out", default=None, help="草稿 media_id 输出文件")
+    p_imgpost.add_argument("--dry-run", action="store_true", help="只校验并输出请求体，不调用微信 API")
+    p_imgpost.add_argument("--json", action="store_true", help="结构化 JSON 输出")
+    p_imgpost.add_argument("--no-comments", action="store_true", help="关闭评论")
     p_imgpost.add_argument("--appid", default=None, help="WeChat AppID")
     p_imgpost.add_argument("--secret", default=None, help="WeChat AppSecret")
+
+    # image-post-check (贴图预检)
+    p_postcheck = sub.add_parser("image-post-check", help="Preflight an image post (no WeChat calls)")
+    p_postcheck.add_argument("images", nargs="*", help="Image file paths")
+    p_postcheck.add_argument("-t", "--title", default=None, help="Post title")
+    p_postcheck.add_argument("-c", "--content", default=None, help="Plain text description")
+    p_postcheck.add_argument("--post", default=None, help="image-post.yaml 路径")
+    p_postcheck.add_argument("--json", action="store_true", help="结构化 JSON 输出")
 
     # gallery
     p_gallery = sub.add_parser("gallery", help="Open theme gallery in browser")
@@ -425,6 +553,8 @@ def main():
             cmd_themes(args)
         elif args.command == "image-post":
             cmd_image_post(args)
+        elif args.command == "image-post-check":
+            cmd_image_post_check(args)
         elif args.command == "gallery":
             cmd_gallery(args)
         elif args.command == "learn-theme":

@@ -2,14 +2,14 @@
 
 # WeWrite · 公众号内容全流程 Skill
 
-**一句话完成选题、素材、写作和审稿——配图、排版与发布随时按需追加**
+**一句话完成选题、素材、写作和审稿——配图、排版、贴图与发布随时按需追加**
 
-选题 · 写作 · 编辑审稿 · 可选 AI 配图 · 18 主题排版 · 草稿箱推送 · 多平台改写 · 越用越像你
+选题 · 写作 · 编辑审稿 · 可选 AI 配图 · 18 主题排版 · 贴图创作 · 草稿箱推送 · 多平台改写 · 越用越像你
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/yujipeng/wewrite/blob/main/LICENSE)
 [![Checks](https://github.com/yujipeng/wewrite/actions/workflows/checks.yml/badge.svg)](https://github.com/yujipeng/wewrite/actions/workflows/checks.yml)
 [![PyPI (upstream)](https://img.shields.io/pypi/v/wewrite?color=059669&label=PyPI%20upstream)](https://pypi.org/project/wewrite/)
-[![Skills](https://img.shields.io/badge/skills-1%20主入口%20%2B%209%20模块-8b5cf6)](#-模块速查)
+[![Skills](https://img.shields.io/badge/skills-1%20主入口%20%2B%2010%20模块-8b5cf6)](#-模块速查)
 [![Themes](https://img.shields.io/badge/themes-18%20%2B%20learn--theme-f59e0b)](#-排版引擎)
 [![Agents](https://img.shields.io/badge/Claude%20Code%20·%20Codex%20·%20OpenClaw%20·%20Hermes-supported-6366f1)](#-快速开始)
 
@@ -49,7 +49,7 @@
 
 - **一句话完成正文**：选题、素材、写作和审稿连续完成；说「交互模式」可在选题或框架处暂停确认。
 - **后续动作真正独立**：配图、排版、发布都能在文章完成后单独执行；排版和发布不会偷偷触发生图。
-- **模块化，one step at a time**：主入口 + 9 个独立 skill，只要选题说 `/wewrite-topic`、只要封面说 `/wewrite-visual`，缺前置会自己补齐。
+- **模块化，one step at a time**：主入口 + 10 个独立 skill，只要选题说 `/wewrite-topic`、只要封面说 `/wewrite-visual`、只要贴图说 `/wewrite-imagepost`，缺前置会自己补齐。
 - **写出能直接用的文章**：先明确读者问题、核心判断与证据边界，再写初稿；审稿不通过就直接改稿并复审，禁止编造作者经历。
 - **7 套写作人格**：像选主题一样选文风，从深夜老友到冷静分析师，一行配置切换。
 - **越用越像你**：编辑飞轮（学习你的修改）+ 范文风格库（SICO 式 few-shot）+ 阅读数据回填反哺选题。
@@ -91,7 +91,7 @@ git clone --depth 1 https://github.com/yujipeng/wewrite.git ~/wewrite
 cd ~/wewrite && bash install.sh
 ```
 
-`install.sh` 做三件事：装 `wewrite` CLI（uv/pipx，无则回退 venv）、把 10 个 skill 链接到 `~/.claude/skills/` 与 `~/.agents/skills/`（检测到 OpenClaw / Codex 时一并链接其 skills 目录）、把旧版用户状态迁到 `~/.wewrite/`。
+`install.sh` 做三件事：装 `wewrite` CLI（uv/pipx，无则回退 venv）、把 11 个 skill 链接到 `~/.claude/skills/` 与 `~/.agents/skills/`（检测到 OpenClaw / Codex 时一并链接其 skills 目录）、把旧版用户状态迁到 `~/.wewrite/`。
 
 在仓库里运行时，CLI 从**本地源码**安装（不是 PyPI 上的上游原版），本仓库的改动会直接生效；脚本幂等，可重复运行。
 
@@ -122,7 +122,7 @@ skill 目录自包含、复制即用；CLI 另装一条：`uv tool install git+h
 你：改写成小红书                    → 多平台改写
 你：学习我的修改                    → 编辑飞轮
 你：看看有什么主题 / 换成 sspai 主题 → 主题画廊 / 重排版
-你：做一个小绿书                    → 图片帖（横滑轮播）
+你：做一个小绿书 / 贴图           → 1-20 张竖图的图片消息草稿（不套主题）
 你：更新                            → 升级到最新版
 ```
 
@@ -184,6 +184,7 @@ wechat:
 | 给这篇配个封面 | `wewrite-visual` | 一张封面图；不改原始正文 |
 | 给这篇完整配图 | `wewrite-visual` | 封面 + 必要内文图 + 带图副本 |
 | 推到草稿箱 / 换个主题 | `wewrite-publish` | 条件满足时生成微信草稿，否则保留本地 HTML |
+| 做一个贴图 / 小绿书 | `wewrite-imagepost` | 标题 + 纯文本 + 1-20 张竖图的图片消息草稿 |
 | 改写成小红书 / 抖音版 | `wewrite-rewrite` | 内容级真改的平台版本 |
 | 学习我的修改 / 导入范文 | `wewrite-learn` | playbook 规则 / 风格库 |
 | 看看文章数据 | `wewrite-stats` | 阅读数据回填 + 选题建议 |
@@ -195,7 +196,7 @@ wechat:
 
 | 层 | 位置 | 内容 |
 |----|------|------|
-| Prompt | `skills/`（10 个自包含 skill） | 选题、事实、观点、实用性和表达判断，每个 skill 自带 references/ |
+| Prompt | `skills/`（11 个自包含 skill） | 选题、事实、观点、实用性和表达判断，每个 skill 自带 references/ |
 | Runtime | `wewrite` CLI（pip 包） | 打分、转 HTML、调微信 API、生图、成本路由——确定性操作 |
 | State | `~/.wewrite/`（`WEWRITE_HOME` 可覆盖） | 凭证、风格、历史、学习产物、输出文件——全部在仓库外 |
 
@@ -218,6 +219,7 @@ skill 目录复制到哪都能用；CLI 与 skill 独立安装升级；换机器
 | 风险提示 | 11 项机械检查，定位套话、碎句、重复节奏等；不判断作者身份 | `wewrite score` |
 | SEO 优化 | 标题策略 / 摘要 / 关键词 / 标签 | wewrite-review |
 | 视觉 AI | 按任务设置生成封面/必要配图，生成前检查数量和预估费用 | `wewrite image-gen` |
+| 贴图创作 | 标题 + 纯文本 + 1-20 张竖图，建 `newspic` 草稿；预检、素材缓存、dry-run | `wewrite image-post` |
 | 排版发布 | 18+ 主题 + 微信兼容修复 + 暗黑模式 | `wewrite preview/publish` |
 | 多平台改写 | 一稿 → 小红书/抖音，内容级真改 + 原创度门 | wewrite-rewrite |
 | 效果复盘 | 微信数据分析 API 回填阅读数据，反哺选题 | `wewrite stats` |
@@ -330,7 +332,9 @@ wewrite themes     # 列出主题名称
 ```bash
 wewrite preview article.md --theme sspai            # Markdown → 微信 HTML 预览
 wewrite publish article.md --cover cover.png --title "标题"   # 推送草稿箱
-wewrite image-post p1.jpg p2.jpg -t "周末探店"       # 小绿书/图片帖（横滑轮播）
+wewrite image-post p1.jpg p2.jpg -t "周末探店"       # 贴图/小绿书（1-20 张，首图封面）
+wewrite image-post --post post.yaml --dry-run --json # 贴图预检 + 请求体（不调 API）
+wewrite image-post-check --post post.yaml            # 贴图预检（不调 API，可单独跑）
 wewrite score article.md --verbose                  # 写作质量评分（11 项检测）
 wewrite content-eval --draft draft.md --final article.md --assessment assessment.yaml --json # 编辑结果
 wewrite hotspots --limit 20                         # 抓热点
@@ -391,6 +395,9 @@ Step 6  封存原始正文 → 写入历史                         ← 主入�
   ├─ 配封面 / 完整配图                                 ← wewrite-visual
   ├─ 微信排版与本地预览                                ← wewrite-publish
   └─ 明确授权后推送草稿箱                              ← wewrite-publish
+
+贴图是与长文并列的独立创作流程：
+  主题与图片叙事 → 纯文本文案 → 1-20 张 3:4 竖图 → 轻量审稿 → 草稿箱  ← wewrite-imagepost
 ```
 
 默认连续完成正文，但“写一篇”只交付本地成稿。“完整制作”是正文、配图和本地预览三个独立
@@ -403,14 +410,15 @@ Step 6  封存原始正文 → 写入历史                         ← 主入�
 
 ```
 wewrite/
-├── skills/                   # Prompt 层：10 个自包含 skill（复制即用）
+├── skills/                   # Prompt 层：11 个自包含 skill（复制即用）
 │   ├── wewrite/                # 主入口：内容流程编排 + 配图/排版/发布可选路由
 │   ├── wewrite-style/          # 风格设置 / Onboard（onboard.md、style-template.md、style.example.yaml）
 │   ├── wewrite-topic/          # 选题（topic-selection.md）
 │   ├── wewrite-write/          # 任务书 + 主张证据 + 安全增强 + 初稿（personas/ 7 人格…）
 │   ├── wewrite-review/         # 事实核对 + 改稿复审 + 标题摘要 + 编辑报告
 │   ├── wewrite-visual/         # 封面 + 必要配图（数量与费用上限）
-│   ├── wewrite-publish/        # 排版 + 发布 + 主题画廊 + 小绿书（wechat-constraints.md）
+│   ├── wewrite-publish/        # 排版 + 发布 + 主题画廊（wechat-constraints.md）
+│   ├── wewrite-imagepost/      # 贴图/小绿书：文案 + 图片叙事 + newspic 草稿
 │   ├── wewrite-learn/          # 学习修改 / 导入范文 / 学排版（learn-edits.md）
 │   ├── wewrite-stats/          # 文章数据复盘（effect-review.md）
 │   └── wewrite-rewrite/        # 一源多平台改写（multiplatform-rewrite.md + platforms/ 平台定义）

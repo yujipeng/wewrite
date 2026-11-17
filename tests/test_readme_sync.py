@@ -65,8 +65,8 @@ def test_plugin_manifest_matches_release_and_skills():
     assert plugin["version"] == version
 
     skills = plugin["skills"]
-    assert len(skills) == 10
-    assert len(set(skills)) == 10
+    assert len(skills) == 11
+    assert len(set(skills)) == 11
     for relative_path in skills:
         assert (ROOT / relative_path / "SKILL.md").is_file()
 
